@@ -52,42 +52,52 @@ async function getLocationFromIP() {
 
 // ----------------------------
 // API Endpoint
+// ----------------------------// ----------------------------
+// API Endpoint
 // ----------------------------
 app.post("/sun", async (req, res) => {
   try {
-    // Convert epoch to Date
-    const recordedDate = new Date(req.body.timestamp * 1000);
+    // Ensure data is an array for uniform processing
+    const records = Array.isArray(req.body) ? req.body : [req.body];
 
-    // Round values
-    const az = roundToTwo(req.body.azimuth);
-    const el = roundToTwo(req.body.elevation);
-
-    // Get dynamic latitude & longitude (or cached for better performance)
+    // Get dynamic latitude & longitude once (for efficiency)
     const { lat, lon } = await getLocationFromIP();
 
-    // Only store if sun is above horizon
-    if (el > 0) {
+    const savedRecords = [];
+    const ignoredRecords = [];
 
-      const data = new Sun({
-        azimuth: az,
-        elevation: el,
-        recordedAt: recordedDate
-      });
+    for (let record of records) {
+      // Convert epoch to Date
+      const recordedDate = new Date(record.timestamp * 1000);
 
-      await data.save();
+      // Round values
+      const az = roundToTwo(record.azimuth);
+      const el = roundToTwo(record.elevation);
 
-      console.log("☀ Daylight Data Saved:", {
-        azimuth: az,
-        elevation: el,
-        recordedAt: recordedDate
-      });
+      // Only store if sun is above horizon
+      if (el > 0) {
+        const data = new Sun({
+          azimuth: az,
+          elevation: el,
+          recordedAt: recordedDate
+        });
 
-      res.send("Saved (Daylight)");
-
-    } else {
-      console.log("🌙 Night data ignored");
-      res.send("Ignored (Night)");
+        await data.save();
+        savedRecords.push({ azimuth: az, elevation: el, recordedAt: recordedDate });
+      } else {
+        ignoredRecords.push({ azimuth: az, elevation: el, recordedAt: recordedDate });
+      }
     }
+
+    console.log("☀ Daylight Data Saved:", savedRecords);
+    if (ignoredRecords.length > 0) console.log("🌙 Night data ignored:", ignoredRecords);
+
+    res.send({
+      saved: savedRecords.length,
+      ignored: ignoredRecords.length,
+      savedRecords,
+      ignoredRecords
+    });
 
   } catch (err) {
     console.error(err);
